@@ -1,14 +1,5 @@
-#include <stdlib.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <string.h>
+#include "common.h"
 #include "json/json.h"
-#include "mysql.h"
-#include <string>
-#include <iostream>
-using namespace std;
 
 class DJson
 {

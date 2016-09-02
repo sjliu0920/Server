@@ -1,21 +1,6 @@
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <signal.h>
-#include <errno.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <string.h>
-#include "json/json.h"
+#include "common.h"
 #include "mysql.h"
-#include <string>
-#include <iostream>
-
 #include "DJson.h"
-using namespace std;
 
 #define SELECT_QUERY "select * from user_table where account = \'%s\' && passwd = \'%s\'"
 #define SELECT_ITEM_LIST_QUERY "select item_name, price, star from item_table where type_id = \'%d\'"
