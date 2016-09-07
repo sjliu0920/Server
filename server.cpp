@@ -4,6 +4,7 @@
 
 #define SELECT_QUERY "select * from user_table where account = \'%s\' && passwd = \'%s\'"
 #define SELECT_ITEM_LIST_QUERY "select item_name, price, star from item_table where type_id = \'%d\'"
+#define SELECT_TYPE_LIST_QUERY "select * from type_table"
 
 typedef void Sigfunc(int);
 Sigfunc *signal(int signo, Sigfunc *func);
@@ -14,6 +15,7 @@ void Echo(int connfd);
 string DoClientRequest(char* buf);
 int CheckForShouldLogin(string account, string passwd);
 string getItemList (int id);
+string getAllTypeList ();
 
 int main()
 {
@@ -68,6 +70,41 @@ int main()
 	}
 }
 
+Sigfunc *signal(int signo, Sigfunc *func)
+{
+	struct sigaction act, oact;
+
+	act.sa_handler = func;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+
+	if(signo == SIGALRM) {
+#ifdef SA_INTERRUPT
+		act.sa_flags |= SA_INTERRUPT;
+#endif
+	} else {
+#ifdef SA_RESTART
+		act.sa_flags |= SA_RESTART;
+#endif
+	}
+
+	if(sigaction(signo, &act, &oact) < 0)
+		return (SIG_ERR);
+
+	return (oact.sa_handler);
+}
+
+void sig_chld(int signo)
+{
+	pid_t pid;
+	int stat;
+
+	while((pid = waitpid(-1, &stat, WNOHANG)) > 0)
+			cout << "child pid:" << pid << " terminated" << endl;
+
+	return;
+}
+
 void Echo(int connfd)
 {
 	ssize_t n;
@@ -118,6 +155,11 @@ string DoClientRequest(char* buf)
 		cout << "getItemList id = " << id << endl;
 		echoToClient = getItemList(id);
 
+	}
+	else if(method == "getAllTypeList")
+	{
+		cout << "getAllTypeList" << endl;
+		echoToClient = getAllTypeList();
 	}
 	else
 	{
@@ -187,7 +229,6 @@ string getItemList (int id)
 	root["num"] = num;
 	root["array"] = arrayObj;
 
-
 	mysql_free_result(res);
 	mysql_close(sock);
 
@@ -198,7 +239,6 @@ string getItemList (int id)
 
 int CheckForShouldLogin(string account, string passwd)
 {
-
 	MYSQL mysql, *sock;    
 	MYSQL_RES *res;       
 	MYSQL_FIELD *fd ;    
@@ -209,6 +249,11 @@ int CheckForShouldLogin(string account, string passwd)
 	if (!(sock = mysql_real_connect(&mysql, "localhost", "root", "lsj", "costco", 0, NULL, 0))) {
 		fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(&mysql));
 		return -1;
+	}
+
+	if (!mysql_set_character_set(&mysql, "utf8"))
+	{
+		printf("New client character set: %s\n", mysql_character_set_name(&mysql));
 	}
 
 	sprintf(querySQL, SELECT_QUERY, account.c_str(), passwd.c_str());
@@ -238,37 +283,62 @@ int CheckForShouldLogin(string account, string passwd)
 	return -1;
 }
 
-Sigfunc *signal(int signo, Sigfunc *func)
+string getAllTypeList()
 {
-	struct sigaction act, oact;
+	MYSQL mysql, *sock;    
+	MYSQL_RES *res;       
+	MYSQL_FIELD *fd ;    
+	MYSQL_ROW row ;     
+	char querySQL[160] = {0};
 
-	act.sa_handler = func;
-	sigemptyset(&act.sa_mask);
-	act.sa_flags = 0;
-
-	if(signo == SIGALRM) {
-#ifdef SA_INTERRUPT
-		act.sa_flags |= SA_INTERRUPT;
-#endif
-	} else {
-#ifdef SA_RESTART
-		act.sa_flags |= SA_RESTART;
-#endif
+	mysql_init(&mysql);
+	if (!(sock = mysql_real_connect(&mysql, "localhost", "root", "lsj", "costco", 0, NULL, 0))) {
+		fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(&mysql));
+		return "";
 	}
 
-	if(sigaction(signo, &act, &oact) < 0)
-		return (SIG_ERR);
+	if (!mysql_set_character_set(&mysql, "utf8"))
+	{
+		printf("New client character set: %s\n", mysql_character_set_name(&mysql));
+	}
 
-	return (oact.sa_handler);
-}
+	sprintf(querySQL, SELECT_TYPE_LIST_QUERY);
+	printf("querySQL = %s\n", querySQL);
+	if(mysql_query(sock, querySQL)) {
+		fprintf(stderr,"Query failed (%s)\n",mysql_error(sock));
+		return "";
+	}
 
-void sig_chld(int signo)
-{
-	pid_t pid;
-	int stat;
+	if (!(res = mysql_store_result(sock))) {
+		fprintf(stderr,"Couldn't get result from %s\n", mysql_error(sock));
+		return "";
+	}
 
-	while((pid = waitpid(-1, &stat, WNOHANG)) > 0)
-			cout << "child pid:" << pid << " terminated" << endl;
+	int num = mysql_num_fields(res);
+	printf("number of fields returned: %d\n", num);
 
-	return;
+	Json::Value root;
+	Json::Value arrayObj;
+
+	num = 0;
+	while (row = mysql_fetch_row(res)) {
+		num++;
+		printf("get one item: [%s:%s]\n", row[0], row[1]);
+		puts( "query ok !\n" ) ; 
+
+		Json::Value item;
+		item["type_id"] = row[0];
+		item["type_name"] = row[1];
+		arrayObj.append(item);
+	} 
+
+	root["num"] = num;
+	root["array"] = arrayObj;
+
+	mysql_free_result(res);
+	mysql_close(sock);
+
+	cout << root.toStyledString() << endl;
+
+	return root.toStyledString();
 }
